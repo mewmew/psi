@@ -1,5 +1,9 @@
 # PSI
 
+[![Build Status](https://travis-ci.org/mewmew/psi.svg?branch=master)](https://travis-ci.org/mewmew/psi)
+[![Coverage Status](https://coveralls.io/repos/github/mewmew/psi/badge.svg?branch=master)](https://coveralls.io/github/mewmew/psi?branch=master)
+[![GoDoc](https://godoc.org/github.com/mewmew/psi?status.svg)](https://godoc.org/github.com/mewmew/psi)
+
 PlayStation 1 emulator, symbolic execution engine and binary lifter.
 
 * The preliminary aim of this repository is to implement a PlayStation I emulator in Go.
