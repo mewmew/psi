@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 
 	"github.com/mewmew/psi/emu"
@@ -30,10 +29,12 @@ func psi(biosPath string) error {
 		return errors.WithStack(err)
 	}
 	hwregs := emu.NewHWRegs()
-	cpu := emu.NewCPU(bios, hwregs)
+	cache := emu.NewCacheControl()
+	ram := emu.NewRAM()
+	cpu := emu.NewCPU(bios, hwregs, cache, ram)
 	for {
 		cpu.Step()
-		fmt.Println(cpu)
+		//fmt.Println(cpu)
 	}
 	return nil
 }

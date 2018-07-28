@@ -13,11 +13,11 @@ const (
 	hwRegsLen  = 8 * 1024 // 8 KB
 )
 
-// HWRegs is a memory map the hardware registers.
+// HWRegs is a memory map of the hardware registers.
 type HWRegs struct {
 }
 
-// NewHWRegs returns a new memory map the hardware registers.
+// NewHWRegs returns a new memory map of the hardware registers.
 func NewHWRegs() *HWRegs {
 	return &HWRegs{}
 }

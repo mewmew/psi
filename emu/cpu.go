@@ -34,6 +34,8 @@ type CPU struct {
 	Mems []Mem
 	// Next instruction to be executed.
 	DelaySlot mips.Inst
+	// Co-processor 0 unit.
+	CO0 *CO0
 }
 
 // NewCPU returns a new CPU state, as initialized after reset.
@@ -51,13 +53,14 @@ func NewCPU(mems ...Mem) *CPU {
 		PC:        entryPoint,
 		Mems:      mems,
 		DelaySlot: nop,
+		CO0:       NewCO0(),
 	}
-	// Init registers to garbage data.
+	// Init registers with garbage data.
 	for i := range cpu.Regs {
 		cpu.Regs[i] = 0xDEADC0DE
 	}
 	// $zero is always 0.
-	cpu.Regs[0] = 0
+	cpu.Regs[cpu.regIndex(mips.ZERO)] = 0
 	return cpu
 }
 
@@ -68,6 +71,7 @@ func (cpu *CPU) Step() {
 	// operations which unconditionally execute the instruction directly
 	// succedding them.
 	inst := cpu.DelaySlot
+	dbg.Printf("inst (addr: %08X): %v\n", cpu.PC, inst)
 
 	// Fetch
 	bits := cpu.LoadUint32(cpu.PC)
@@ -77,9 +81,11 @@ func (cpu *CPU) Step() {
 	cpu.DelaySlot = cpu.Decode(bits)
 
 	// Execute
-	dbg.Println("inst:", inst)
 	cpu.Execute(inst)
 }
+
+// Isolate cache if bit in SR register of CO0 is set.
+const isolateCacheMask = 0x00010000
 
 // LoadUint32 loads a 32-bit unsigned integer from the given address.
 func (cpu *CPU) LoadUint32(addr uint32) uint32 {
@@ -98,6 +104,11 @@ func (cpu *CPU) LoadUint32(addr uint32) uint32 {
 func (cpu *CPU) StoreUint32(addr, v uint32) {
 	if addr%4 != 0 {
 		panic(fmt.Errorf("unaligned access of memory at address 0x%08X", addr))
+	}
+	if cpu.CO0.Reg(mips.SR)&isolateCacheMask != 0 {
+		// Cache is isolated, ignore write.
+		warn.Println("write with isolate cache not yet implemented")
+		return
 	}
 	// TODO: Remove debug output.
 	dbg.Printf("store at: 0x%08X (%d)\n", addr, v)
@@ -181,15 +192,49 @@ func (cpu *CPU) Execute(inst mips.Inst) {
 		s := inst.Args[1].(mips.Reg)
 		t := inst.Args[2].(mips.Reg)
 		cpu.SetReg(d, cpu.Reg(s)|cpu.Reg(t))
-	// TODO: continue here.
+	case mips.MTC0:
+		// MTC0    $t, $d
+		t := inst.Args[0].(mips.Reg)
+		d := inst.Args[1].(mips.Reg)
+		cpu.CO0.SetReg(d, cpu.Reg(t))
+
 	case mips.BNE:
 		// BNE     $s, $t, offset
 		s := inst.Args[0].(mips.Reg)
 		t := inst.Args[1].(mips.Reg)
-		i := inst.Args[2].(mips.Imm)
+		offset := inst.Args[2].(mips.PCRel)
 		if cpu.Reg(s) != cpu.Reg(t) {
-			cpu.PC += i.Imm
+			cpu.PC += uint32(offset)
 		}
+	case mips.LW:
+		// LW      $t, offset($s)
+		if cpu.CO0.Reg(mips.SR)&isolateCacheMask != 0 {
+			// Cache is isolated, ignore read.
+			warn.Println("read with isolate cache not yet implemented")
+			return
+		}
+		t := inst.Args[0].(mips.Reg)
+		m := inst.Args[1].(mips.Mem)
+		addr := cpu.Reg(m.Base) + uint32(m.Offset)
+		cpu.SetReg(t, cpu.LoadUint32(addr))
+		// TODO: Figure out how to handle load delay slot.
+	case mips.SLTU:
+		// SLTU    $d, $s, $t
+		d := inst.Args[0].(mips.Reg)
+		s := inst.Args[1].(mips.Reg)
+		t := inst.Args[2].(mips.Reg)
+		if cpu.Reg(s) < cpu.Reg(t) {
+			cpu.SetReg(d, 1)
+		} else {
+			cpu.SetReg(d, 0)
+		}
+	// TODO: Check difference bewteen SLTU and SLT.
+	case mips.ADDU:
+		// ADDU    $d, $s, $t
+		d := inst.Args[0].(mips.Reg)
+		s := inst.Args[1].(mips.Reg)
+		t := inst.Args[2].(mips.Reg)
+		cpu.SetReg(d, cpu.Reg(s)+cpu.Reg(t))
 	default:
 		panic(fmt.Errorf("support for instruction opcode %q not yet implemented", inst.Op))
 	}
@@ -211,7 +256,7 @@ func (cpu *CPU) String() string {
 
 // Reg returns the contents of the given register.
 func (cpu *CPU) Reg(r mips.Reg) uint32 {
-	return cpu.Regs[r]
+	return cpu.Regs[cpu.regIndex(r)]
 }
 
 // SetReg sets the contents of the given register to v; taking precaution to
@@ -221,5 +266,21 @@ func (cpu *CPU) SetReg(r mips.Reg, v uint32) {
 	if r == mips.ZERO {
 		return
 	}
-	cpu.Regs[r] = v
+	cpu.Regs[cpu.regIndex(r)] = v
+}
+
+// regIndex returns the index of the CPU register, starting at 0.
+func (cpu *CPU) regIndex(r mips.Reg) int {
+	cpu.validateReg(r)
+	return int(r - mips.ZERO)
+}
+
+// validateReg validates the given CPU register.
+func (cpu *CPU) validateReg(r mips.Reg) {
+	switch {
+	case mips.ZERO <= r && r <= mips.RA:
+		// valid CPU register.
+	default:
+		panic(fmt.Errorf("invalid register %v; not present on CPU", r))
+	}
 }
