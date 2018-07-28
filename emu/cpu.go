@@ -127,7 +127,7 @@ func (cpu *CPU) StoreUint32(addr, v uint32) {
 	addr = maskSegment(addr)
 	if cpu.CO0.Reg(mips.SR)&isolateCacheMask != 0 {
 		// Cache is isolated, ignore write.
-		warn.Println("32-bit write with isolate cache not yet implemented")
+		warn.Println("32-bit write with isolated cache not yet implemented")
 		return
 	}
 	// TODO: Remove debug output.
@@ -230,7 +230,7 @@ func (cpu *CPU) Execute(inst mips.Inst) {
 		// LW      $t, offset($s)
 		if cpu.CO0.Reg(mips.SR)&isolateCacheMask != 0 {
 			// Cache is isolated, ignore read.
-			warn.Println("read with isolate cache not yet implemented")
+			warn.Println("read with isolated cache not yet implemented")
 			return
 		}
 		t := inst.Args[0].(mips.Reg)

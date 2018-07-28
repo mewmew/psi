@@ -9,7 +9,7 @@ import (
 
 // A CO0 holds the state of a co-processor 0 unit.
 type CO0 struct {
-	// Regs is the register bank of co-processor 0.
+	// Register bank of co-processor 0.
 	Regs [32]uint32
 }
 
