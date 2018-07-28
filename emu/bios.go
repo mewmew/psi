@@ -13,7 +13,7 @@ var _ Mem = (*BIOS)(nil)
 
 // BIOS memory map.
 const (
-	biosBase = 0xBFC00000
+	biosBase = 0x1FC00000
 	biosLen  = 512 * 1024 // 512 KB
 )
 

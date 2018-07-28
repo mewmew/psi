@@ -92,6 +92,7 @@ func (cpu *CPU) LoadUint32(addr uint32) uint32 {
 	if addr%4 != 0 {
 		panic(fmt.Errorf("unaligned access of memory at address 0x%08X", addr))
 	}
+	addr = maskSegment(addr)
 	for _, mem := range cpu.Mems {
 		if offset, ok := mem.Range().Contains(addr); ok {
 			return mem.LoadUint32(offset)
@@ -105,6 +106,7 @@ func (cpu *CPU) StoreUint32(addr, v uint32) {
 	if addr%4 != 0 {
 		panic(fmt.Errorf("unaligned access of memory at address 0x%08X", addr))
 	}
+	addr = maskSegment(addr)
 	if cpu.CO0.Reg(mips.SR)&isolateCacheMask != 0 {
 		// Cache is isolated, ignore write.
 		warn.Println("write with isolate cache not yet implemented")

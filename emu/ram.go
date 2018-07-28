@@ -9,7 +9,7 @@ var _ Mem = (*RAM)(nil)
 
 // RAM memory map.
 const (
-	ramBase = 0xA0000000
+	ramBase = 0x00000000
 	ramLen  = 2048 * 1024 // 2048 KB
 )
 
