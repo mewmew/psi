@@ -36,6 +36,8 @@ type CPU struct {
 	DelaySlot mips.Inst
 	// Co-processor 0 unit.
 	CO0 *CO0
+	// Sound processing unit.
+	SPU *SPU
 }
 
 // NewCPU returns a new CPU state, as initialized after reset.
@@ -54,6 +56,7 @@ func NewCPU(mems ...Mem) *CPU {
 		Mems:      mems,
 		DelaySlot: nop,
 		CO0:       NewCO0(),
+		SPU:       NewSPU(),
 	}
 	// Init registers with garbage data.
 	for i := range cpu.Regs {
@@ -84,6 +87,21 @@ func (cpu *CPU) Step() {
 	cpu.Execute(inst)
 }
 
+// StoreUint16 stores v to the given address.
+func (cpu *CPU) StoreUint16(addr uint32, v uint16) {
+	if addr%2 != 0 {
+		panic(fmt.Errorf("unaligned access of memory at address 0x%08X", addr))
+	}
+	addr = maskSegment(addr)
+	// TODO: Remove debug output.
+	dbg.Printf("16-bit store at: 0x%08X (%d)\n", addr, v)
+	if offset, ok := cpu.SPU.Range().Contains(addr); ok {
+		cpu.SPU.StoreUint16(offset, v)
+		return
+	}
+	panic(fmt.Errorf("unable to store 16-bit value at address 0x%08X; no memory map found for region", addr))
+}
+
 // Isolate cache if bit in SR register of CO0 is set.
 const isolateCacheMask = 0x00010000
 
@@ -109,18 +127,18 @@ func (cpu *CPU) StoreUint32(addr, v uint32) {
 	addr = maskSegment(addr)
 	if cpu.CO0.Reg(mips.SR)&isolateCacheMask != 0 {
 		// Cache is isolated, ignore write.
-		warn.Println("write with isolate cache not yet implemented")
+		warn.Println("32-bit write with isolate cache not yet implemented")
 		return
 	}
 	// TODO: Remove debug output.
-	dbg.Printf("store at: 0x%08X (%d)\n", addr, v)
+	dbg.Printf("32-bit store at: 0x%08X (%d)\n", addr, v)
 	for _, mem := range cpu.Mems {
 		if offset, ok := mem.Range().Contains(addr); ok {
 			mem.StoreUint32(offset, v)
 			return
 		}
 	}
-	panic(fmt.Errorf("unable to store value at address 0x%08X; no memory map found for region", addr))
+	panic(fmt.Errorf("unable to store 32-bit value at address 0x%08X; no memory map found for region", addr))
 }
 
 // Decode decodes the given MIPS I instruction bit pattern.
@@ -230,13 +248,20 @@ func (cpu *CPU) Execute(inst mips.Inst) {
 		} else {
 			cpu.SetReg(d, 0)
 		}
-	// TODO: Check difference bewteen SLTU and SLT.
+		// TODO: Check difference bewteen SLTU and SLT.
 	case mips.ADDU:
 		// ADDU    $d, $s, $t
 		d := inst.Args[0].(mips.Reg)
 		s := inst.Args[1].(mips.Reg)
 		t := inst.Args[2].(mips.Reg)
 		cpu.SetReg(d, cpu.Reg(s)+cpu.Reg(t))
+	case mips.SH:
+		// SH      $t, offset($s)
+		t := inst.Args[0].(mips.Reg)
+		m := inst.Args[1].(mips.Mem)
+		addr := cpu.Reg(m.Base) + uint32(m.Offset)
+		v := uint16(cpu.Reg(t))
+		cpu.StoreUint16(addr, v)
 	default:
 		panic(fmt.Errorf("support for instruction opcode %q not yet implemented", inst.Op))
 	}
